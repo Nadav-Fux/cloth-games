@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0c" />
+  <title>nVision · cloth</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0a0c;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #frame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
+    .tabs {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      gap: 6px;
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.18);
+      border-radius: 999px;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      opacity: 0.32;
+      transition: opacity 0.25s ease;
+    }
+
+    .tabs:hover,
+    .tabs:focus-within {
+      opacity: 0.95;
+    }
+
+    .tab {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgba(244, 243, 239, 0.45);
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      position: relative;
+      transition: background 0.18s ease, transform 0.18s ease;
+    }
+
+    .tab:hover {
+      background: rgba(244, 243, 239, 0.85);
+      transform: scale(1.2);
+    }
+
+    .tab.active {
+      background: #f2e9cf;
+      box-shadow: 0 0 0 2px rgba(242, 233, 207, 0.18);
+    }
+
+    .tab .label {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(244, 243, 239, 0.85);
+      opacity: 0;
+      transition: opacity 0.18s ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .tab:hover .label,
+    .tabs:focus-within .tab.active .label {
+      opacity: 1;
+    }
+
+    @media (max-width: 480px) {
+      .tabs {
+        opacity: 0.55;
+      }
+    }
+  </style>
+</head>
+<body>
+  <iframe id="frame" title="nVision content" allow="fullscreen"></iframe>
+
+  <nav class="tabs" role="tablist" aria-label="cloth modes">
+    <button class="tab" data-target="cloth" role="tab" aria-label="cloth"><span class="label">cloth</span></button>
+    <button class="tab" data-target="slingshot" role="tab" aria-label="slingshot"><span class="label">slingshot</span></button>
+    <button class="tab" data-target="pluck" role="tab" aria-label="pluck"><span class="label">pluck</span></button>
+    <button class="tab" data-target="catch" role="tab" aria-label="catch"><span class="label">catch</span></button>
+  </nav>
+
+  <script>
+    (() => {
+      const frame = document.getElementById("frame");
+      const tabs = document.querySelectorAll(".tab");
+      const valid = new Set(["cloth", "slingshot", "pluck", "catch"]);
+      const titles = {
+        cloth: "nVision · cloth",
+        slingshot: "nVision · slingshot",
+        pluck: "nVision · pluck",
+        catch: "nVision · catch"
+      };
+
+      function targetFromHash() {
+        const h = (location.hash || "#cloth").replace(/^#/, "");
+        return valid.has(h) ? h : "cloth";
+      }
+
+      function activate(name) {
+        if (!valid.has(name)) name = "cloth";
+        const path = name + "/index.html";
+        if (frame.getAttribute("src") !== path) frame.setAttribute("src", path);
+        tabs.forEach((t) => t.classList.toggle("active", t.dataset.target === name));
+        document.title = titles[name] || titles.cloth;
+        if (location.hash.replace(/^#/, "") !== name) {
+          history.replaceState(null, "", "#" + name);
+        }
+      }
+
+      tabs.forEach((t) => {
+        t.addEventListener("click", () => activate(t.dataset.target));
+      });
+
+      window.addEventListener("hashchange", () => activate(targetFromHash()));
+      activate(targetFromHash());
+    })();
+  </script>
+</body>
+</html>
