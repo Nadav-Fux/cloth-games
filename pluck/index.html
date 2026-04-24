@@ -152,9 +152,14 @@
       0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
       100% { opacity: 0; transform: translate(-50%, calc(-50% - 56px)) scale(1.4); }
     }
+    .game-tabs { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; gap: 2px; padding: 3px 4px; background: rgba(0,0,0,0.45); border: 1px solid rgba(244,243,239,0.18); border-radius: 999px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .game-tabs a { padding: 3px 8px; border-radius: 999px; color: rgba(244,243,239,0.65); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; transition: background 0.15s ease, color 0.15s ease; }
+    .game-tabs a:hover { color: #f2e9cf; background: rgba(244,243,239,0.08); }
+    .game-tabs a.active { color: #0a0a0c; background: #f2e9cf; }
   </style>
 </head>
 <body>
+  <nav class="game-tabs"><a href="../cloth/">cloth</a><a href="../slingshot/">slingshot</a><a href="../pluck/" class="active">pluck</a><a href="../catch/">catch</a></nav>
   <main class="stage">
     <canvas id="cloth"></canvas>
   </main>
