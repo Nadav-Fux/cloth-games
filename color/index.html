@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>nVision Digital</title>
+  <title>nVision · color</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,144,300..800&display=swap" />
@@ -348,7 +348,7 @@
   </style>
 </head>
 <body>
-  <nav class="game-tabs"><a href="../cloth/" class="active">cloth</a><a href="../color/">color</a><a href="../dye/">dye</a></nav>
+  <nav class="game-tabs"><a href="../cloth/">cloth</a><a href="../color/" class="active">color</a><a href="../dye/">dye</a></nav>
   <main class="hero">
     <canvas id="clothCanvas" aria-label="Interactive curtain simulation"></canvas>
 
@@ -755,6 +755,50 @@
         scheduleLetterMeasure();
       }
 
+      // ── color wave state ──
+      const PALETTES = [
+        { name: "cream",    r:[36,168],  g:[38,170],  b:[44,178]  },
+        { name: "ocean",    r:[10,68],   g:[28,140],  b:[60,210]  },
+        { name: "sunset",   r:[80,240],  g:[28,120],  b:[40,150]  },
+        { name: "forest",   r:[18,90],   g:[44,180],  b:[36,150]  },
+        { name: "lavender", r:[60,180],  g:[36,140],  b:[90,230]  },
+        { name: "neon",     r:[20,255],  g:[20,200],  b:[80,255]  },
+        { name: "volcanic", r:[80,255],  g:[20,140],  b:[10,80]   },
+        { name: "moss",     r:[28,120],  g:[60,200],  b:[50,140]  },
+        { name: "rose",     r:[100,250], g:[40,150],  b:[80,180]  }
+      ];
+
+      const CORNERS = [
+        { name:"TL", c:0,        r:0        },
+        { name:"TR", c:COLS-1,   r:0        },
+        { name:"BL", c:0,        r:ROWS-1   },
+        { name:"BR", c:COLS-1,   r:ROWS-1   }
+      ];
+
+      const colorWave = {
+        current: Math.floor(Math.random() * PALETTES.length),
+        next: 0,
+        origin: CORNERS[Math.floor(Math.random() * CORNERS.length)],
+        startTime: performance.now(),
+        duration: 4500,
+        hold: 1200,
+        fade: 0.18,
+        maxDist: Math.sqrt((COLS-1)*(COLS-1) + (ROWS-1)*(ROWS-1))
+      };
+      colorWave.next = (colorWave.current + 1 + Math.floor(Math.random() * (PALETTES.length-1))) % PALETTES.length;
+
+      function pickNextWave() {
+        let np;
+        do { np = Math.floor(Math.random() * PALETTES.length); } while (np === colorWave.next);
+        let no;
+        do { no = CORNERS[Math.floor(Math.random() * CORNERS.length)]; }
+        while (no.name === colorWave.origin.name);
+        colorWave.current = colorWave.next;
+        colorWave.next = np;
+        colorWave.origin = no;
+        colorWave.startTime = performance.now();
+      }
+
       function buildCloth() {
         particles = [];
         constraints = [];
@@ -1129,23 +1173,40 @@
         return { x: nx, y: ny, z: nz };
       }
 
-      function colorForCell(light, depth, dark) {
+      function colorForCell(light, depth, dark, c, r) {
         const shade = Math.max(0.2, Math.min(1, light * 0.6 + 0.5));
         const depthShade = Math.max(0.7, Math.min(1, 1 - depth * 0.0009));
         const k = shade * depthShade;
-        let r;
-        let g;
-        let b;
-        if (dark) {
-          r = 24 + 180 * k;
-          g = 24 + 182 * k;
-          b = 28 + 188 * k;
-        } else {
-          r = 36 + 132 * k;
-          g = 38 + 134 * k;
-          b = 44 + 142 * k;
-        }
-        return `rgb(${r | 0}, ${g | 0}, ${b | 0})`;
+
+        const elapsed = performance.now() - colorWave.startTime;
+        const t = Math.min(1, elapsed / colorWave.duration);
+
+        const dc = c - colorWave.origin.c;
+        const dr = r - colorWave.origin.r;
+        const cellDist = Math.sqrt(dc*dc + dr*dr) / colorWave.maxDist;
+
+        const fade = colorWave.fade;
+        let mix;
+        if (t >= cellDist + fade) mix = 1;
+        else if (t <= cellDist - fade) mix = 0;
+        else mix = (t - cellDist + fade) / (2 * fade);
+        mix = mix * mix * (3 - 2 * mix);
+
+        const cur = PALETTES[colorWave.current];
+        const nxt = PALETTES[colorWave.next];
+
+        const r0 = cur.r[0] + (cur.r[1] - cur.r[0]) * k;
+        const g0 = cur.g[0] + (cur.g[1] - cur.g[0]) * k;
+        const b0 = cur.b[0] + (cur.b[1] - cur.b[0]) * k;
+        const r1 = nxt.r[0] + (nxt.r[1] - nxt.r[0]) * k;
+        const g1 = nxt.g[0] + (nxt.g[1] - nxt.g[0]) * k;
+        const b1 = nxt.b[0] + (nxt.b[1] - nxt.b[0]) * k;
+
+        const fr = r0 + (r1 - r0) * mix;
+        const fg = g0 + (g1 - g0) * mix;
+        const fb = b0 + (b1 - b0) * mix;
+
+        return `rgb(${fr|0}, ${fg|0}, ${fb|0})`;
       }
 
       function drawBackground(time) {
@@ -1224,7 +1285,7 @@
             ctx.lineTo(q11.x, q11.y);
             ctx.lineTo(q01.x, q01.y);
             ctx.closePath();
-            ctx.fillStyle = colorForCell(light, depth, dark);
+            ctx.fillStyle = colorForCell(light, depth, dark, c, r);
             ctx.fill();
 
             const valley = Math.max(0, -light) * 0.14;
@@ -1270,6 +1331,11 @@
       function tick(now) {
         const rawDt = (now - lastTime) / 1000 || 0.016;
         lastTime = now;
+
+        const wElapsed = now - colorWave.startTime;
+        if (wElapsed >= colorWave.duration + colorWave.hold) {
+          pickNextWave();
+        }
 
         if (!paused) {
           simulate(rawDt, now);
