@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>nVision · dye</title>
+  <title>nVision · splash</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,144,300..800&display=swap" />
@@ -275,8 +275,8 @@
   <nav class="game-tabs">
     <a href="../cloth/">cloth</a>
     <a href="../color/">color</a>
-    <a href="../splash/">splash</a>
-    <a href="../dye/" class="active">dye</a>
+    <a href="../splash/" class="active">splash</a>
+    <a href="../dye/">dye</a>
   </nav>
   <main class="hero">
     <canvas id="clothCanvas" aria-label="Interactive cloth simulation"></canvas>
@@ -288,8 +288,8 @@
     <div class="timer" id="timer">60</div>
 
     <div class="overlay" id="overlay">
-      <h1>dye</h1>
-      <p>drops fall on the cloth.<br/>pull it to direct the flow.<br/>cover as much as you can in 60s.</p>
+      <h1>splash</h1>
+      <p>tap the cloth to splash a color from that point.<br/>each tap = a new color, never repeating.<br/>cover the cloth in 60s.</p>
       <button id="startBtn">begin</button>
     </div>
 
@@ -349,12 +349,9 @@
       const POINTER_RADIUS = 78;
 
       const DYE_COLORS = [
-        [220, 62, 62],
-        [245, 138, 32],
-        [58, 188, 148],
-        [68, 132, 238],
-        [158, 78, 228],
-        [238, 198, 42],
+        [220, 62, 62], [245, 138, 32], [238, 198, 42], [180, 210, 40],
+        [90, 200, 80], [58, 188, 148], [60, 200, 210], [68, 132, 238],
+        [110, 90, 230], [158, 78, 228], [220, 80, 180], [240, 120, 140],
       ];
 
       let width = 1, height = 1, dpr = 1;
@@ -374,15 +371,23 @@
         leftFan: 1.0, rightFan: 0.6, bottomFan: 0.8, stiffness: 0.82
       };
 
+      const recentColors = [];
+      function pickColor() {
+        let idx2;
+        do { idx2 = (Math.random() * DYE_COLORS.length) | 0; }
+        while (recentColors.includes(idx2));
+        recentColors.push(idx2);
+        if (recentColors.length > 5) recentColors.shift();
+        return { idx: idx2, rgb: DYE_COLORS[idx2] };
+      }
+
       // Paint per cloth quad cell: (COLS-1)*(ROWS-1) cells
       let paintAlpha, paintR, paintG, paintB;
 
       const game = {
         active: false,
         timeLeft: 60,
-        spawnTimer: 0,
-        spawnInterval: 1.1,
-        drops: []
+        waves: []
       };
 
       function cellIdx(c, r) {
@@ -395,7 +400,6 @@
         paintR = new Uint8Array(n);
         paintG = new Uint8Array(n);
         paintB = new Uint8Array(n);
-        game.drops = [];
       }
 
       function depositPaint(c, r, cr, cg, cb, strength) {
@@ -415,34 +419,6 @@
         paintAlpha[i] = newA;
       }
 
-      const BLEED_BASE = 0.05;   // /sec ambient bleed (small, so idle still progresses slowly)
-      const BLEED_VEL  = 1.6;    // /sec multiplier on |cloth velocity| (cells get smeared by motion)
-      const BLEED_VMAX = 1.4;    // saturate above this px-per-frame magnitude
-
-      function clothBleed(dt) {
-        // Pre-compute per-cell velocity magnitude using corner particles
-        for (let r = 0; r < ROWS - 1; r++) {
-          for (let c = 0; c < COLS - 1; c++) {
-            const i = cellIdx(c, r);
-            if (paintAlpha[i] < 0.3) continue;  // only painted cells bleed
-            // Avg velocity of the 4 corner particles of this quad
-            const p0 = particles[idx(c, r)];
-            const p1 = particles[idx(c + 1, r)];
-            const p2 = particles[idx(c, r + 1)];
-            const p3 = particles[idx(c + 1, r + 1)];
-            const vx = ((p0.x-p0.oldX)+(p1.x-p1.oldX)+(p2.x-p2.oldX)+(p3.x-p3.oldX)) * 0.25;
-            const vy = ((p0.y-p0.oldY)+(p1.y-p1.oldY)+(p2.y-p2.oldY)+(p3.y-p3.oldY)) * 0.25;
-            const vMag = Math.min(BLEED_VMAX, Math.hypot(vx, vy));
-            const rate = (BLEED_BASE + BLEED_VEL * vMag) * dt;
-            const cr = paintR[i], cg = paintG[i], cb = paintB[i];
-            depositPaint(c - 1, r, cr, cg, cb, rate);
-            depositPaint(c + 1, r, cr, cg, cb, rate);
-            depositPaint(c, r - 1, cr, cg, cb, rate);
-            depositPaint(c, r + 1, cr, cg, cb, rate);
-          }
-        }
-      }
-
       function computeCoverage() {
         if (!paintAlpha) return 0;
         let painted = 0;
@@ -453,143 +429,55 @@
         return painted / total;
       }
 
-      function spawnDrop() {
-        const colorIdx = (Math.random() * DYE_COLORS.length) | 0;
-        const [cr, cg, cb] = DYE_COLORS[colorIdx];
-        const c = Math.floor(Math.random() * (COLS - 1));
-        const topQ = projected[c]; // row 0, col c
-        const baseX = topQ ? topQ.x : centerX;
-        const baseY = topQ ? topQ.y : centerY * 0.3;
-        game.drops.push({
-          x: baseX + (Math.random() - 0.5) * restX * 1.4,
-          y: baseY - 30 - Math.random() * 50,
-          vy: 55 + Math.random() * 90,
-          r: cr, g: cg, b: cb,
-          radius: 4 + Math.random() * 3.5,
-          life: 1.0,
-          attached: false,
-          attachC: -1, attachR: -1,
-          slideTimer: 0,
-          slideCooldown: 0.09 + Math.random() * 0.07,
-          slideSteps: 0,
-          maxSlideSteps: 3 + (Math.random() * 6 | 0),
+      // Per-cell distance-to-nearest-particle in cell units, used to bound wave radius
+      const MAX_CELL_RADIUS = Math.hypot(COLS - 1, ROWS - 1); // ~41 for 30x30
+
+      const WAVE_SPEED = 14;        // cells per second of wavefront expansion
+      const WAVE_THICKNESS = 1.6;   // cells of "live" ring around the wavefront
+      const WAVE_DEPOSIT = 0.85;    // alpha deposited per cell hit by the wavefront
+
+      function spawnWave(seedC, seedR, color) {
+        game.waves.push({
+          sc: seedC, sr: seedR,
+          r: 0,                                   // current radius in cell units
+          rgb: color.rgb,
+          life: (MAX_CELL_RADIUS + 4) / WAVE_SPEED // expires once wave passed corner
         });
       }
 
-      function updateDrops(dt) {
-        const G2D = 500;
-
-        for (let i = game.drops.length - 1; i >= 0; i--) {
-          const d = game.drops[i];
-
-          if (!d.attached) {
-            d.vy += G2D * dt;
-            d.y += d.vy * dt;
-
-            // Find nearest cloth particle we've reached
-            let nearC = -1, nearR = -1, nearDist = 26 * 26;
-            for (let r = 0; r < ROWS - 1; r++) {
-              for (let c = 0; c < COLS - 1; c++) {
-                const q = projected[idx(c, r)];
-                if (!q) continue;
-                const dx = q.x - d.x;
-                const dy = q.y - d.y;
-                const dist2 = dx * dx + dy * dy;
-                if (dist2 < nearDist && d.y >= q.y - 4) {
-                  nearDist = dist2;
-                  nearC = c; nearR = r;
-                }
+      function updateWaves(dt) {
+        for (let w = game.waves.length - 1; w >= 0; w--) {
+          const wave = game.waves[w];
+          const prevR = wave.r;
+          wave.r += WAVE_SPEED * dt;
+          wave.life -= dt;
+          // Paint cells whose distance from seed is within [prevR - 0.6, wave.r + 0.6]
+          const rMin = Math.max(0, prevR - 0.6);
+          const rMax = wave.r + 0.6;
+          const cMinC = Math.max(0, Math.floor(wave.sc - rMax));
+          const cMaxC = Math.min(COLS - 2, Math.ceil(wave.sc + rMax));
+          const cMinR = Math.max(0, Math.floor(wave.sr - rMax));
+          const cMaxR = Math.min(ROWS - 2, Math.ceil(wave.sr + rMax));
+          for (let r = cMinR; r <= cMaxR; r++) {
+            for (let c = cMinC; c <= cMaxC; c++) {
+              const dc = c - wave.sc, dr = r - wave.sr;
+              const d = Math.hypot(dc, dr);
+              if (d >= rMin && d <= rMax) {
+                // Deposit strength fades slightly with radius so waves blend visibly
+                const t = 1 - (d / MAX_CELL_RADIUS) * 0.4;
+                depositPaint(c, r, wave.rgb[0], wave.rgb[1], wave.rgb[2], WAVE_DEPOSIT * t);
               }
-            }
-
-            if (nearC >= 0) {
-              d.attached = true;
-              d.attachC = nearC; d.attachR = nearR;
-              d.slideTimer = 0; d.vy = 0;
-              depositPaint(nearC, nearR, d.r, d.g, d.b, 0.75);
-            } else if (d.y > height + 60) {
-              game.drops.splice(i, 1);
-              continue;
-            }
-          } else {
-            const cc = d.attachC, cr = d.attachR;
-            const qi = idx(cc, cr);
-
-            // Visual follows cloth particle
-            if (projected[qi]) {
-              d.x += (projected[qi].x - d.x) * 0.38;
-              d.y += (projected[qi].y - d.y) * 0.38;
-            }
-
-            d.slideTimer += dt;
-            if (d.slideTimer >= d.slideCooldown) {
-              d.slideTimer = 0;
-              d.slideSteps++;
-              depositPaint(cc, cr, d.r, d.g, d.b, 0.5);
-
-              if (d.slideSteps > d.maxSlideSteps) {
-                // Splat neighbors and die
-                depositPaint(cc, cr, d.r, d.g, d.b, 1.0);
-                const nb = [[-1,0],[1,0],[0,-1],[0,1],[-1,1],[1,1],[-1,-1],[1,-1]];
-                for (const [dc, dr] of nb) {
-                  depositPaint(cc + dc, cr + dr, d.r, d.g, d.b, 0.28 + Math.random() * 0.22);
-                }
-                game.drops.splice(i, 1);
-                continue;
-              }
-
-              // Slide to steepest downhill neighbor
-              const cq = projected[qi];
-              let bestY = cq ? cq.y : -Infinity;
-              let bestC = -1, bestR = -1;
-              const nb = [[-1,0],[1,0],[0,1],[-1,1],[1,1],[0,-1],[-1,-1],[1,-1]];
-              for (const [dc, dr] of nb) {
-                const nc = cc + dc, nr = cr + dr;
-                if (nc < 0 || nc >= COLS - 1 || nr < 0 || nr >= ROWS - 1) continue;
-                const nq = projected[idx(nc, nr)];
-                if (nq && nq.y > bestY + 0.5) {
-                  bestY = nq.y; bestC = nc; bestR = nr;
-                }
-              }
-
-              if (bestC >= 0) {
-                d.attachC = bestC; d.attachR = bestR;
-              } else {
-                // Settled
-                depositPaint(cc, cr, d.r, d.g, d.b, 1.0);
-                game.drops.splice(i, 1);
-                continue;
-              }
-            }
-
-            d.life -= dt * 0.07;
-            if (d.life <= 0) {
-              game.drops.splice(i, 1);
             }
           }
+          if (wave.life <= 0) game.waves.splice(w, 1);
         }
-      }
-
-      function drawDrops() {
-        if (!game.drops.length) return;
-        ctx.save();
-        for (const d of game.drops) {
-          ctx.globalAlpha = d.life * 0.88;
-          ctx.beginPath();
-          ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
-          ctx.fillStyle = `rgb(${d.r},${d.g},${d.b})`;
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        ctx.restore();
       }
 
       function start() {
         initPaint();
+        game.waves = []; recentColors.length = 0;
         game.active = true;
         game.timeLeft = 60;
-        game.spawnTimer = 0;
-        game.spawnInterval = 1.1;
         document.body.classList.add("game-active");
         ui.overlay.style.display = "none";
         ui.score.textContent = "0%";
@@ -844,6 +732,20 @@
           pointer.offsetY = q.y - pointer.y;
           pointer.offsetZ = pointer.grabbed.z;
         }
+        if (game.active) {
+          // Find nearest cell under (clientX, clientY) using projected[]
+          let bestC = -1, bestR = -1, bestD2 = Infinity;
+          for (let r = 0; r < ROWS - 1; r++) {
+            for (let c = 0; c < COLS - 1; c++) {
+              const q = projected[idx(c, r)];
+              if (!q) continue;
+              const dx = q.x - event.clientX, dy = q.y - event.clientY;
+              const d2 = dx*dx + dy*dy;
+              if (d2 < bestD2) { bestD2 = d2; bestC = c; bestR = r; }
+            }
+          }
+          if (bestC >= 0) spawnWave(bestC, bestR, pickColor());
+        }
       });
 
       canvas.addEventListener("pointermove", (event) => {
@@ -1073,11 +975,6 @@
         drawShadow();
         drawCloth(); // populates projected
 
-        if (game.active && dt > 0) {
-          updateDrops(dt);
-          drawDrops();
-        }
-
         // Bottom fade
         ctx.save();
         const fade = ctx.createLinearGradient(0, height * 0.52, 0, height);
@@ -1095,13 +992,7 @@
         if (!paused) simulate(rawDt, now);
 
         if (game.active) {
-          clothBleed(rawDt);
-          game.spawnTimer -= rawDt;
-          if (game.spawnTimer <= 0) {
-            spawnDrop();
-            game.spawnTimer = game.spawnInterval * (0.55 + Math.random() * 0.9);
-            game.spawnInterval = Math.max(0.32, game.spawnInterval - 0.007);
-          }
+          updateWaves(rawDt);
 
           game.timeLeft -= rawDt;
           if (game.timeLeft <= 0) {
