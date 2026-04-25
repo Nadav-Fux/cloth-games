@@ -705,10 +705,10 @@
 
         const isMobile = width < 640;
         const topMargin = isMobile ? Math.max(20, height * 0.02) : Math.max(32, height * 0.04);
-        const reserve = isMobile ? Math.max(140, height * 0.18) : Math.max(260, height * 0.34);
+        const reserve = isMobile ? Math.max(140, height * 0.18) : Math.max(110, height * 0.14);
         const availH = height - topMargin - reserve;
         const clothWidth = isMobile ? width * 0.98 : Math.min(width * 0.92, 1060);
-        const maxClothH = isMobile ? Math.max(720, height * 0.82) : 560;
+        const maxClothH = isMobile ? Math.max(720, height * 0.82) : 896;
         const clothHeight = Math.max(220, Math.min(availH, maxClothH));
         restX = clothWidth / (COLS - 1);
         restY = clothHeight / (ROWS - 1);
