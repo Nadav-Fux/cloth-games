@@ -760,27 +760,33 @@
         scheduleLetterMeasure();
       }
 
-      const SPLASH_COLORS = [
-        [220, 62, 62], [245, 138, 32], [238, 198, 42], [180, 210, 40],
-        [90, 200, 80], [58, 188, 148], [60, 200, 210], [68, 132, 238],
-        [110, 90, 230], [158, 78, 228], [220, 80, 180], [240, 120, 140],
+      const SPLASH_PALETTES = [
+        { name: "cream",    r:[36,168],  g:[38,170],  b:[44,178]  },
+        { name: "ocean",    r:[10,68],   g:[28,140],  b:[60,210]  },
+        { name: "sunset",   r:[80,240],  g:[28,120],  b:[40,150]  },
+        { name: "forest",   r:[18,90],   g:[44,180],  b:[36,150]  },
+        { name: "lavender", r:[60,180],  g:[36,140],  b:[90,230]  },
+        { name: "neon",     r:[20,255],  g:[20,200],  b:[80,255]  },
+        { name: "volcanic", r:[80,255],  g:[20,140],  b:[10,80]   },
+        { name: "moss",     r:[28,120],  g:[60,200],  b:[50,140]  },
+        { name: "rose",     r:[100,250], g:[40,150],  b:[80,180]  }
       ];
-      const recentColors = [];
-      function pickColor() {
+      const recentPalettes = [];
+      function pickPalette() {
         let i;
-        do { i = (Math.random() * SPLASH_COLORS.length) | 0; }
-        while (recentColors.includes(i));
-        recentColors.push(i);
-        if (recentColors.length > 5) recentColors.shift();
-        return SPLASH_COLORS[i];
+        do { i = (Math.random() * SPLASH_PALETTES.length) | 0; }
+        while (recentPalettes.includes(i));
+        recentPalettes.push(i);
+        if (recentPalettes.length > 5) recentPalettes.shift();
+        return i;
       }
 
       const waves = [];
-      const WAVE_SPEED = 16;
-      const BASE_COLOR = [240, 235, 220];
-      const BASE_COLOR_DARK = [22, 26, 38];
+      const WAVE_SPEED = 8;
+      const FADE_BAND = 4.5;
+      const BASE_PALETTE_IDX = 0;
       function spawnSplashAtCell(sc, sr) {
-        waves.push({ sc, sr, rgb: pickColor(), startTime: performance.now() });
+        waves.push({ sc, sr, palette: pickPalette(), startTime: performance.now() });
         if (waves.length > 64) waves.shift();
       }
 
@@ -1170,25 +1176,40 @@
         return { x: nx, y: ny, z: nz };
       }
 
-      function colorForCell(_light, _depth, _dark, c, r) {
-        if (waves.length === 0) {
-          const base = document.body.classList.contains("dark") ? BASE_COLOR_DARK : BASE_COLOR;
-          return `rgb(${base[0]},${base[1]},${base[2]})`;
-        }
+      function mixPaletteChannel(p, which, k) {
+        return p[which][0] + (p[which][1] - p[which][0]) * k;
+      }
+
+      function colorForCell(light, depth, dark, c, r) {
+        const shade = Math.max(0.2, Math.min(1, light * 0.6 + 0.5));
+        const depthShade = Math.max(0.7, Math.min(1, 1 - depth * 0.0009));
+        const k = shade * depthShade;
+
+        const base = SPLASH_PALETTES[BASE_PALETTE_IDX];
+        let R = mixPaletteChannel(base, 'r', k);
+        let G = mixPaletteChannel(base, 'g', k);
+        let B = mixPaletteChannel(base, 'b', k);
+
+        if (waves.length === 0) return `rgb(${R|0},${G|0},${B|0})`;
+
         const now = performance.now();
-        let chosenRgb = document.body.classList.contains("dark") ? BASE_COLOR_DARK : BASE_COLOR;
-        let chosenStart = -1;
         for (let i = 0; i < waves.length; i++) {
           const w = waves[i];
           const elapsed = (now - w.startTime) / 1000;
-          const cellDist = Math.hypot(c - w.sc, r - w.sr);
           const wavefront = WAVE_SPEED * elapsed;
-          if (cellDist <= wavefront && w.startTime > chosenStart) {
-            chosenRgb = w.rgb;
-            chosenStart = w.startTime;
-          }
+          const cellDist = Math.hypot(c - w.sc, r - w.sr);
+          const t = (wavefront - cellDist) / FADE_BAND;
+          if (t <= 0) continue;
+          const a = t >= 1 ? 1 : (t * t * (3 - 2 * t));
+          const p = SPLASH_PALETTES[w.palette];
+          const wR = mixPaletteChannel(p, 'r', k);
+          const wG = mixPaletteChannel(p, 'g', k);
+          const wB = mixPaletteChannel(p, 'b', k);
+          R = R + (wR - R) * a;
+          G = G + (wG - G) * a;
+          B = B + (wB - B) * a;
         }
-        return `rgb(${chosenRgb[0]},${chosenRgb[1]},${chosenRgb[2]})`;
+        return `rgb(${R|0},${G|0},${B|0})`;
       }
 
       function drawBackground(time) {
@@ -1313,6 +1334,11 @@
       function tick(now) {
         const rawDt = (now - lastTime) / 1000 || 0.016;
         lastTime = now;
+
+        const cullCutoff = performance.now() - 12000;
+        while (waves.length > 0 && waves[0].startTime < cullCutoff && waves.length > 1) {
+          waves.shift();
+        }
 
         if (!paused) {
           simulate(rawDt, now);

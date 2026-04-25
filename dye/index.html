@@ -415,33 +415,6 @@
         paintAlpha[i] = newA;
       }
 
-      const BLEED_BASE = 0.05;   // /sec ambient bleed (small, so idle still progresses slowly)
-      const BLEED_VEL  = 1.6;    // /sec multiplier on |cloth velocity| (cells get smeared by motion)
-      const BLEED_VMAX = 1.4;    // saturate above this px-per-frame magnitude
-
-      function clothBleed(dt) {
-        // Pre-compute per-cell velocity magnitude using corner particles
-        for (let r = 0; r < ROWS - 1; r++) {
-          for (let c = 0; c < COLS - 1; c++) {
-            const i = cellIdx(c, r);
-            if (paintAlpha[i] < 0.3) continue;  // only painted cells bleed
-            // Avg velocity of the 4 corner particles of this quad
-            const p0 = particles[idx(c, r)];
-            const p1 = particles[idx(c + 1, r)];
-            const p2 = particles[idx(c, r + 1)];
-            const p3 = particles[idx(c + 1, r + 1)];
-            const vx = ((p0.x-p0.oldX)+(p1.x-p1.oldX)+(p2.x-p2.oldX)+(p3.x-p3.oldX)) * 0.25;
-            const vy = ((p0.y-p0.oldY)+(p1.y-p1.oldY)+(p2.y-p2.oldY)+(p3.y-p3.oldY)) * 0.25;
-            const vMag = Math.min(BLEED_VMAX, Math.hypot(vx, vy));
-            const rate = (BLEED_BASE + BLEED_VEL * vMag) * dt;
-            const cr = paintR[i], cg = paintG[i], cb = paintB[i];
-            depositPaint(c - 1, r, cr, cg, cb, rate);
-            depositPaint(c + 1, r, cr, cg, cb, rate);
-            depositPaint(c, r - 1, cr, cg, cb, rate);
-            depositPaint(c, r + 1, cr, cg, cb, rate);
-          }
-        }
-      }
 
       function computeCoverage() {
         if (!paintAlpha) return 0;
@@ -1095,7 +1068,6 @@
         if (!paused) simulate(rawDt, now);
 
         if (game.active) {
-          clothBleed(rawDt);
           game.spawnTimer -= rawDt;
           if (game.spawnTimer <= 0) {
             spawnDrop();
